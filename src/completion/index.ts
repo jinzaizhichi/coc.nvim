@@ -23,7 +23,6 @@ import PopupMenu, { PopupMenuConfig } from './pum'
 import sources from './sources'
 import { CompleteConfig, CompleteDoneOption, CompleteFinishKind, CompleteItem, CompleteOption, DurationCompleteItem, InsertMode, ISource, SortMethod } from './types'
 import { checkIgnoreRegexps, createKindMap, getInput, getResumeInput, MruLoader, shouldStop, toCompleteDoneItem } from './util'
-import { onUnexpectedError } from '../util/errors'
 const logger = createLogger('completion')
 const TRIGGER_TIMEOUT = getConditionValue(200, 20)
 const CURSORMOVE_DEBOUNCE = getConditionValue(10, 0)
@@ -228,14 +227,14 @@ export class Completion implements Disposable {
     complete.onDidRefresh(async () => {
       clearTimeout(this.triggerTimer)
       if (complete.isEmpty) {
-        this.cancel()
+        this.cancelAndClose(false)
         return
       }
       if (this.inserted) return
       await this.filterResults()
     })
     let shouldStop = await complete.doComplete()
-    if (shouldStop) this.cancel()
+    if (shouldStop) this.cancelAndClose(false)
   }
 
   private async onTextChangedP(_bufnr: number, info: InsertChange): Promise<void> {
@@ -363,10 +362,16 @@ export class Completion implements Disposable {
   }
 
   // Void CompleteDone logic
-  public cancelAndClose(): void {
-    this.cancel()
-    events.completing = false
-    this.nvim.call('coc#pum#_close', [], true)
+  public cancelAndClose(close = true): void {
+    clearTimeout(this.triggerTimer)
+    if (this.complete) {
+      this.cancel()
+      events.completing = false
+      let doc = workspace.getDocument(workspace.bufnr)
+      if (doc) doc._forceSync()
+      if (close) this.nvim.call('coc#pum#_close', [], true)
+      void events.fire('CompleteDone', [{}])
+    }
   }
 
   public async stop(close: boolean, kind: CompleteFinishKind = CompleteFinishKind.Normal): Promise<void> {
@@ -399,7 +404,7 @@ export class Completion implements Disposable {
     if (!Is.func(source.onCompleteDone)) return
     let { insertMode, snippetsSupport } = this.config
     let opt: CompleteDoneOption = Object.assign({ insertMode, snippetsSupport }, option)
-    Promise.resolve(source.onCompleteDone(item, opt)).catch(onUnexpectedError)
+    await source.onCompleteDone(item, opt)
   }
 
   private async onInsertEnter(bufnr: number): Promise<void> {

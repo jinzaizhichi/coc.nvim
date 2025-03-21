@@ -18,12 +18,12 @@ fi
 npm test
 
 if [ $? -eq 0 ]; then
-  git config --global user.name "GitHub Actions"
-  git config --global user.email "actions@github.com"
-  git fetch origin release
-  commitmsg=$(git log head --oneline | head -1)
+  git config --global user.name "chemzqm"
+  git config --global user.email "chemzqm@users.noreply.github.com"
+  git fetch origin release --depth=1
+  commitmsg=$(git log --oneline -1)
   mkdir -p .release
-  cp -r .github bin lua build autoload plugin history.md Readme.md doc .release
+  cp -r .github bin lua build autoload plugin history.md README.md doc .release
   git checkout release
   cp -r .release/* .
   nvim -c 'helptags doc|q'
